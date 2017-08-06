@@ -37,11 +37,32 @@ add_r6_metadata <- function(val, name, class, is_active) {
 # Modified from docstring - a function has a doc block
 # if it's a call to {, with more than 1 element, and the first element is
 # a character vector.
+# it also checks if the srcref is attached and uses comments if
+# they are available
 docblock <- function(f) {
   stopifnot(is.function(f))
   if (is.primitive(f)) return(NULL)
 
-  b <- body(f)
+  ## check if there is a srcref attached
+  if(!getOption("keep.source")) {
+      stop("Option 'keep.source' has to be true to parse documentation for R6 classes.")
+  }
+
+  func_def <- attr(f, "srcref")
+  if(is.null(func_def)) {
+      return(NULL)
+  }
+  else {
+      func_def <- as.character(func_def)
+  }
+  
+  # replace any comments at the beginning of a line by character quotes
+  comment_regexp <- "\\s*#+'(.*)"
+  func_def <- gsub(comment_regexp, "\"\\1\"", func_def, perl=TRUE)
+  ## now parse it
+  func <- eval(parse(text=func_def))
+  b <- body(func)
+      
   if (length(b) <= 2 || !identical(b[[1]], quote(`{`))) return(NULL)
 
   first <- b[[2]]
@@ -66,49 +87,72 @@ docblock <- function(f) {
   block_one_line <- gsub("^\n+|\n+$", "", block_one_line)
 
   subblocks <- strsplit(block_one_line, split="\n\\s*\n[\n\\s]*", perl=TRUE, fixed=FALSE)[[1]]
-  
-  param_lines <- unlist(lapply(subblocks, extract_param_from_block))
-  blocks_nonparam <- lapply(subblocks, extract_nonparam_from_block)
-  ## remove empty blocks
-  blocks_nonparam <- blocks_nonparam[unlist(lapply(blocks_nonparam, length)) > 0]
-  
-  ## if there are any param_lines, make a describe block
-  if(length(param_lines) > 0) {
-      param_beginning <- "\\strong{Parameters:}\n\\describe{"
-      param_ending <- "}"
-      item_lines <- unlist(lapply(param_lines, paramline_to_item))
-      param_block <- paste(c(param_beginning, item_lines, param_ending), collapse="\n")
-  }
-  else {
-      param_block <- character(0)
+
+  subblocks_split <- rbind(lapply(subblocks, split_block))
+
+  ## check that only param lines exist and at most one return line
+  all_hunk_names <- unique(subblocks_split$hunk_names)
+
+  nonallowed_names <- setdiff(all_hunk_names, c(NA, "param", "return"))
+  if(length(nonallowed_names) > 0) {
+      stop("@-values not allowed used: ", paste(nonallowed_names, collapse=", "))
   }
 
+  ## check that there is at most one return line
+  if(sum(subblocks_split$hunk_names == "return") > 1) {
+      stop("More than 1 return value specified")
+  }
+
+  ## extract all non-parameter lines from all subblocks
+  ## then remove the empty ones
+  non_at_blocks <- with(subblocks_split, hunk_values[is.na(hunk_names)])
+  non_at_blocks <- non_at_blocks[unlist(lapply(non_at_blocks, length)) > 0]
+  non_at_blocks_rd <- paste(non_at_blocks, collapse="\n\n")
+  
+  ## get all param-hunks
+  param_hunks <- with(subblocks_split, hunk_values[hunk_names=="param"])
+  
+  ## if there are any param_lines, make a describe block
+  if(length(param_hunks) > 0) {
+      param_beginning <- "\\strong{Parameters:}\n\\describe{"
+      param_ending <- "}"
+      item_lines <- unlist(lapply(as.list(param_hunks), paramhunk_to_item))
+      param_block_rd <- paste(c(param_beginning, item_lines, param_ending), collapse="\n")
+  }
+  else {
+      param_block_rd <- character(0)
+  }
+
+  ## get the return-hunk 
+  return_hunks <- with(subblocks_split, hunk_values[hunk_names=="return"])
+  if(length(return_hunks) > 0) { # in this case has to be of length 1
+      return_beginning <- "\\strong{Return:}\n"
+      return_ending <- "\n\n"
+      return_lines <- returnhunk_to_item(return_hunks)
+      return_block_rd <- paste(c(return_beginning, return_lines, return_ending), collapse="\n")
+  }
+    
   return(paste(c(blocks_nonparam, param_block), collapse="\n\n"))
 }
 
-## assumption is that block has no empty lines
-extract_param_from_block <- function(block) {
-    block_split <- strsplit(block, split="[\\s\n]*@param\\s+", perl=TRUE, fixed=FALSE)[[1]]
-    if(length(block_split) == 1) {
-        return(NULL)
-    }
-    else {
-        return(block_split[-1])
-    }
+
+split_block <- function(block) {
+    ## we want to split off any blocks that are non-parameteric blocks
+    ## that is the case for all blocks before the occurence of an @ sign
+    ## split at the @-signs
+    block_split <- strsplit(block, split="[\\s\n]*@", perl=TRUE, fixed=FALSE)[[1]]
+    non_at_line <- block_split[1]
+    at_lines <- block_split[-1]
+    # the word at the beginning of each break is the name of the parameter
+    at_line_regexp <- "^([^\\s]+)\\s(.*)$"
+    hunk_names <- gsub(at_line_regexp, "\\1", at_lines)
+    hunk_values <- gsub(at_line_regexp, "\\2", at_lines)
+
+    return(data.frame(hunk_names=c(NA, hunk_names), hunk_values=c(non_at_line, hunk_values)))
 }
 
-## assumption is that block has no empty lines
-extract_nonparam_from_block <- function(block) {
-    block_nonparam <- strsplit(block, split="[\\s\n]*@param\\s+", perl=TRUE, fixed=FALSE)[[1]][1]
-    if(block_nonparam=="") {
-        return(NULL)
-    }
-    else {
-        return(block_nonparam)
-    }
-}
 
-paramline_to_item <- function(line) {
+paramhunk_to_item <- function(line) {
     ## strip starting whitespace
     line <- gsub("^\\s+", "", line, perl=TRUE)
 
@@ -132,4 +176,13 @@ paramline_to_item <- function(line) {
         stop(paste("Not Rd complete:", remaining))
     }
     return(paste0("\\item{", first_word, "}{", remaining, "}"))
+}
+
+returnhunk_to_item <- function(line) {
+    
+    ## nothing to do but check that remaining is rdComplete
+    if(!rdComplete(line)) {
+        stop(paste("Not Rd complete:", line))
+    }
+    return(line)
 }
