@@ -1,4 +1,4 @@
-Package: roxygen2
+Package: roxygen3
 Title: In-Source Documentation for R
 Description: A 'Doxygen'-like in-source documentation system
     for Rd, collation, and 'NAMESPACE' files.
