@@ -239,22 +239,46 @@ topic_add_name_aliases <- function(topic, block, name) {
 
 topic_add_methods <- function(topic, block) {
   obj <- block$object
-  if (!inherits(obj, "rcclass")) return()
+  if (!inherits(obj, "rcclass") && !inherits(obj, "r6class")) return()
 
-  methods <- obj$methods
-  if (is.null(obj$methods)) return()
+  if(inherits(obj, "rcclass")) {
+      methods <- obj$methods
+      if (is.null(obj$methods)) return()
+      
+      desc <- lapply(methods, function(x) docstring(x$value@.Data))
+      usage <- vapply(methods, function(x) {
+          usage <- function_usage(x$value@name, formals(x$value@.Data))
+          as.character(wrap_string(usage))
+      }, character(1))
+      
+      has_docs <- !vapply(desc, is.null, logical(1))
+      desc <- desc[has_docs]
+      usage <- usage[has_docs]
 
-  desc <- lapply(methods, function(x) docstring(x$value@.Data))
-  usage <- vapply(methods, function(x) {
-    usage <- function_usage(x$value@name, formals(x$value@.Data))
-    as.character(wrap_string(usage))
-  }, character(1))
+      topic$add_simple_field("rcmethods", setNames(desc, usage))
+      return(topic)
+  }
+  else { # is an r6class
+      methods <- obj$methods
+      if (is.null(obj$methods)) return()
 
-  has_docs <- !vapply(desc, is.null, logical(1))
-  desc <- desc[has_docs]
-  usage <- usage[has_docs]
+      desc <- lapply(methods, function(x) docblock(x$value))
+      usage <- vapply(methods, function(x) {
+          usage <- function_usage(attr(x$value, "r6method"), formals(x$value))
+          as.character(wrap_string(usage))
+      }, character(1))
+      
+      has_docs <- !vapply(desc, is.null, logical(1))
 
-  topic$add_simple_field("rcmethods", setNames(desc, usage))
+
+      desc <- desc[has_docs]
+      usage <- usage[has_docs]
+      topic$add_simple_field("r6methods", setNames(desc, usage))
+
+      browser()
+
+      return(topic)
+  }
 }
 
 topic_add_inherit <- function(topic, block) {

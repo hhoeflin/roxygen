@@ -41,8 +41,7 @@ object_usage.s4class <- function(x) NULL
 
 object_usage.rcclass <- function(x) NULL
 
-#' @export
-default_usage.r6class <- function(x) NULL
+object_usage.r6class <- function(x) NULL
 
 
 # Function usage ----------------------------------------------------------

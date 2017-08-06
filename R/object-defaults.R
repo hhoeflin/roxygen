@@ -69,6 +69,14 @@ object_defaults.rcclass <- function(x) {
 }
 
 #' @export
+object_defaults.r6class <- function(x) {
+  list(
+    docType = "class"
+  )
+}
+
+
+#' @export
 object_defaults.s4method <- function(x) {
   list(
     docType = "methods"
