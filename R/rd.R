@@ -275,8 +275,6 @@ topic_add_methods <- function(topic, block) {
       usage <- usage[has_docs]
       topic$add_simple_field("r6methods", setNames(desc, usage))
 
-      browser()
-
       return(topic)
   }
 }

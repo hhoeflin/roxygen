@@ -43,25 +43,7 @@ docblock <- function(f) {
   stopifnot(is.function(f))
   if (is.primitive(f)) return(NULL)
 
-  ## check if there is a srcref attached
-  if(!getOption("keep.source")) {
-      stop("Option 'keep.source' has to be true to parse documentation for R6 classes.")
-  }
-
-  func_def <- attr(f, "srcref")
-  if(is.null(func_def)) {
-      return(NULL)
-  }
-  else {
-      func_def <- as.character(func_def)
-  }
-  
-  # replace any comments at the beginning of a line by character quotes
-  comment_regexp <- "\\s*#+'(.*)"
-  func_def <- gsub(comment_regexp, "\"\\1\"", func_def, perl=TRUE)
-  ## now parse it
-  func <- eval(parse(text=func_def))
-  b <- body(func)
+  b <- body(f)
       
   if (length(b) <= 2 || !identical(b[[1]], quote(`{`))) return(NULL)
 
@@ -88,18 +70,18 @@ docblock <- function(f) {
 
   subblocks <- strsplit(block_one_line, split="\n\\s*\n[\n\\s]*", perl=TRUE, fixed=FALSE)[[1]]
 
-  subblocks_split <- rbind(lapply(subblocks, split_block))
+  subblocks_split <- do.call(rbind, lapply(subblocks, split_block))
 
   ## check that only param lines exist and at most one return line
   all_hunk_names <- unique(subblocks_split$hunk_names)
 
   nonallowed_names <- setdiff(all_hunk_names, c(NA, "param", "return"))
   if(length(nonallowed_names) > 0) {
-      stop("@-values not allowed used: ", paste(nonallowed_names, collapse=", "))
+      stop("@-values not allowed used: ", paste(paste0("@", nonallowed_names), collapse=", "))
   }
 
   ## check that there is at most one return line
-  if(sum(subblocks_split$hunk_names == "return") > 1) {
+  if(sum(with(subblocks_split, !is.na(hunk_names) & hunk_names == "return")) > 1) {
       stop("More than 1 return value specified")
   }
 
@@ -110,7 +92,7 @@ docblock <- function(f) {
   non_at_blocks_rd <- paste(non_at_blocks, collapse="\n\n")
   
   ## get all param-hunks
-  param_hunks <- with(subblocks_split, hunk_values[hunk_names=="param"])
+  param_hunks <- with(subblocks_split, hunk_values[!is.na(hunk_names) & hunk_names=="param"])
   
   ## if there are any param_lines, make a describe block
   if(length(param_hunks) > 0) {
@@ -124,15 +106,18 @@ docblock <- function(f) {
   }
 
   ## get the return-hunk 
-  return_hunks <- with(subblocks_split, hunk_values[hunk_names=="return"])
+  return_hunks <- with(subblocks_split, hunk_values[!is.na(hunk_names) & hunk_names=="return"])
   if(length(return_hunks) > 0) { # in this case has to be of length 1
       return_beginning <- "\\strong{Return:}\n"
       return_ending <- "\n\n"
       return_lines <- returnhunk_to_item(return_hunks)
       return_block_rd <- paste(c(return_beginning, return_lines, return_ending), collapse="\n")
   }
+  else {
+      return_block_rd <- character(0)
+  }
     
-  return(paste(c(blocks_nonparam, param_block), collapse="\n\n"))
+  return(paste(c("", non_at_blocks, param_block_rd, return_block_rd), collapse="\n\n"))
 }
 
 
@@ -144,11 +129,11 @@ split_block <- function(block) {
     non_at_line <- block_split[1]
     at_lines <- block_split[-1]
     # the word at the beginning of each break is the name of the parameter
-    at_line_regexp <- "^([^\\s]+)\\s(.*)$"
+    at_line_regexp <- "^(\\S+)\\s(.*)$"
     hunk_names <- gsub(at_line_regexp, "\\1", at_lines)
     hunk_values <- gsub(at_line_regexp, "\\2", at_lines)
 
-    return(data.frame(hunk_names=c(NA, hunk_names), hunk_values=c(non_at_line, hunk_values)))
+    return(data.frame(hunk_names=c(NA, hunk_names), hunk_values=c(non_at_line, hunk_values), stringsAsFactors = FALSE))
 }
 
 
