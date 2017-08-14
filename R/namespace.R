@@ -94,7 +94,7 @@ default_export.s3method  <- function(x, block) export_s3_method(attr(x$value, "s
 #' @export
 default_export.rcclass   <- function(x, block) export_class(x$value@className)
 #' @export
-default_export.r6class   <- function(x, block) export_class(x$value$classname)
+default_export.r6class   <- function(x, block) export(x$value$classname)
 #' @export
 default_export.default   <- function(x, block) export(x$alias)
 #' @export
