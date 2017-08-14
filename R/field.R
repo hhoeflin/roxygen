@@ -183,6 +183,7 @@ format.roxy_field_rcmethods <- function(x, ...) {
   describe_section("Methods", names(x$values), x$values)
 }
 
+#' @export
 format.roxy_field_r6methods <- function(x, ...) {
   describe_section("Methods", names(x$values), x$values)
 }
