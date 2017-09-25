@@ -265,7 +265,7 @@ topic_add_methods <- function(topic, block) {
       desc <- lapply(methods, function(x) docblock(x$value))
       usage <- vapply(methods, function(x) {
           usage <- function_usage(attr(x$value, "r6method"), formals(x$value))
-          as.character(wrap_string(usage))
+          as.character(wrap_string(usage, width=70))
       }, character(1))
       
       has_docs <- !vapply(desc, is.null, logical(1))
