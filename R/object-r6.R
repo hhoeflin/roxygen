@@ -96,7 +96,7 @@ docblock <- function(f) {
   
   ## if there are any param_lines, make a describe block
   if(length(param_hunks) > 0) {
-      param_beginning <- "\\strong{Parameters:}\n\\describe{"
+      param_beginning <- "\\strong{Parameters}\n\\describe{"
       param_ending <- "}"
       item_lines <- unlist(lapply(as.list(param_hunks), paramhunk_to_item))
       param_block_rd <- paste(c(param_beginning, item_lines, param_ending), collapse="\n")
@@ -108,7 +108,7 @@ docblock <- function(f) {
   ## get the return-hunk 
   return_hunks <- with(subblocks_split, hunk_values[!is.na(hunk_names) & hunk_names=="return"])
   if(length(return_hunks) > 0) { # in this case has to be of length 1
-      return_beginning <- "\\strong{Return:}\n"
+      return_beginning <- "\\strong{Return}\n"
       return_ending <- "\n\n"
       return_lines <- returnhunk_to_item(return_hunks)
       return_block_rd <- paste(c(return_beginning, return_lines, return_ending), collapse="\n")
