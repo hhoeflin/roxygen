@@ -24,35 +24,72 @@ test_that("proper link references are added", {
   }
 })
 
+test_that("can not have [ inside of link", {
+  md <- markdown_on(TRUE)
+  on.exit(markdown_on(md))
+
+  expect_equal(
+    full_markdown("`[[`. [subset()]"),
+    "\\code{[[}. \\code{\\link[=subset]{subset()}}"
+  )
+})
+
+test_that("can escape [ to avoid spurious links", {
+  md <- markdown_on(TRUE)
+  on.exit(markdown_on(md))
+
+  expect_equal(
+    full_markdown("\\[test\\]"),
+    "[test]"
+  )
+
+  expect_equal(
+    full_markdown("\\[ [test] \\]"),
+    "[ \\link{test} ]",
+  )
+})
+
+test_that("\\Sexpr with options not converted to links", {
+  md <- markdown_on(TRUE)
+  on.exit(markdown_on(md))
+
+  expect_equal(
+     full_markdown("\\Sexpr[results=rd]{runif(1)}"),
+     "\\Sexpr[results=rd]{runif(1)}"
+   )
+})
+
+test_that("% in links are escaped", {
+  md <- markdown_on(TRUE)
+  on.exit(markdown_on(md))
+
+  expect_equal(full_markdown("[x][%%]"), "\\link[=\\%\\%]{x}")
+  expect_equal(full_markdown("[%][x]"), "\\link[=x]{\\%}")
+  expect_equal(full_markdown("[%%]"), "\\link{\\%\\%}")
+  expect_equal(full_markdown("[foo::%%]"), "\\link[foo:\\%\\%]{foo::\\%\\%}")
+})
+
 test_that("commonmark picks up the various link references", {
   cases <- list(
-    c("foo [func()] bar",
-      "<link destination=\"R:func\\(\\)\" title=\"\">\\s*<text>func\\(\\)</text>"),
-    c("foo [obj] bar",
-      "<link destination=\"R:obj\" title=\"\">\\s*<text>obj</text>"),
-    c("foo [text][func()] bar",
-      "<link destination=\"R:func\\(\\)\" title=\"\">\\s*<text>text</text>"),
-    c("foo [text][obj] bar",
-      "<link destination=\"R:obj\" title=\"\">\\s*<text>text</text>"),
-    c("foo [pkg::func()] bar",
-      "<link destination=\"R:pkg::func\\(\\)\" title=\"\">\\s*<text>pkg::func\\(\\)</text>"),
-    c("foo [pkg::obj] bar",
-      "<link destination=\"R:pkg::obj\" title=\"\">\\s*<text>pkg::obj</text>"),
-    c("foo [text][pkg::func()] bar",
-      "<link destination=\"R:pkg::func\\(\\)\" title=\"\">\\s*<text>text</text>"),
-    c("foo [text][pkg::obj] bar",
-      "<link destination=\"R:pkg::obj\" title=\"\">\\s*<text>text</text>"),
-    c("foo [linktos4-class] bar",
-      "<link destination=\"R:linktos4-class\" title=\"\">\\s*<text>linktos4-class</text>"),
-    c("foo [pkg::s4-class] bar",
-      "<link destination=\"R:pkg::s4-class\" title=\"\">\\s*<text>pkg::s4-class</text>")
+    list("foo [func()] bar",            c("R:func()", "func()")),
+    list("foo [obj] bar",               c("R:obj", "obj")),
+    list("foo [text][func()] bar",      c("R:func()", "text")),
+    list("foo [text][obj] bar",         c("R:obj", "text")),
+    list("foo [pkg::func()] bar",       c("R:pkg::func()", "pkg::func()")),
+    list("foo [pkg::obj] bar",          c("R:pkg::obj", "pkg::obj")),
+    list("foo [text][pkg::func()] bar", c("R:pkg::func()", "text")),
+    list("foo [text][pkg::obj] bar",    c("R:pkg::obj", "text")),
+    list("foo [linktos4-cl] bar",       c("R:linktos4-cl", "linktos4-cl")),
+    list("foo [pkg::s4-cl] bar",        c("R:pkg::s4-cl", "pkg::s4-cl"))
   )
 
   for (i in seq_along(cases)) {
-    expect_match(
-      commonmark::markdown_xml(add_linkrefs_to_md(cases[[i]][1])),
-      cases[[i]][2]
-    )
+    x <- commonmark::markdown_xml(add_linkrefs_to_md(cases[[i]][[1]]))
+    xdoc <- xml2::xml_ns_strip(xml2::read_xml(x))
+    link <- xml2::xml_find_first(xdoc, "//link")
+    expect_equal(xml2::xml_attr(link, "destination"), cases[[i]][[2]][1])
+    text <- xml2::xml_find_first(link, "./text")
+    expect_equal(xml2::xml_text(text), cases[[i]][[2]][2], info = i)
   }
 })
 
@@ -169,8 +206,8 @@ test_that("a weird markdown link bug is fixed", {
     #' Link to another package, function: [devtools::document()].
     #' Link to another package, non-function: [devtools::document].
     #'
-    #' Link with link text:  [this great function][roxygenize()] or
-    #' [that great function][roxygenize].
+    #' Link with link text: [this great function][roxygenize()],
+    #' [`roxygenize`][roxygenize()], or [that great function][roxygenize].
     #'
     #' In another package: [and this one][devtools::document].
     #'
@@ -188,8 +225,8 @@ test_that("a weird markdown link bug is fixed", {
     #' Link to another package, function: \\code{\\link[devtools:document]{devtools::document()}}.
     #' Link to another package, non-function: \\link[devtools:document]{devtools::document}.
     #'
-    #' Link with link text:  \\link[=roxygenize]{this great function} or
-    #' \\link[=roxygenize]{that great function}.
+    #' Link with link text: \\link[=roxygenize]{this great function},
+    #' \\code{\\link[=roxygenize]{roxygenize}}, or \\link[=roxygenize]{that great function}.
     #'
     #' In another package: \\link[devtools:document]{and this one}.
     #'
@@ -215,6 +252,32 @@ test_that("another markdown link bug is fixed", {
     #' Description, see \\code{\\link[=escape_rd_for_md]{escape_rd_for_md()}}.
     #'
     #' And also \\link{object}.
+    foo <- function() {}")[[1]]
+  expect_equivalent_rd(out1, out2)
+})
+
+test_that("markdown code as link text is rendered as code", {
+
+  out1 <- roc_proc_text(roc, "
+    #' Title
+    #'
+    #' Description, see [`name`][dest],
+    #' [`function`][function()],
+    #' [`filter`][stats::filter()],
+    #' [`bar`][pkg::bar],
+    #' [`terms`][terms.object],
+    #' [`abc`][abc-class].
+    #' @md
+    foo <- function() {}")[[1]]
+  out2 <- roc_proc_text(roc, "
+    #' Title
+    #'
+    #' Description, see \\code{\\link[=dest]{name}},
+    #' \\code{\\link[=function]{function}},
+    #' \\code{\\link[stats:filter]{filter}},
+    #' \\code{\\link[pkg:bar]{bar}},
+    #' \\code{\\link[=terms.object]{terms}},
+    #' \\code{\\link[=abc-class]{abc}}.
     foo <- function() {}")[[1]]
   expect_equivalent_rd(out1, out2)
 })
@@ -271,6 +334,36 @@ test_that("[]() links are still fine", {
     #' Description, see \\href{http://www.someurl.com}{some thing}.
     foo <- function() {}")[[1]]
   expect_equivalent_rd(out1, out2)
+
+  out1 <- roc_proc_text(roc, "
+    #' Title
+    #'
+    #' Link
+    #' text [broken
+    #' across lines](http://www.someurl.com) preserve
+    #' whitespace, even when
+    #' [broken across
+    #' several
+    #' lines](http://www.someurl.com),
+    #' or with varying
+    #' [amounts \
+    #'   of  \
+    #' interspersed   \
+    #'   whitespace](http://www.someurl.com).
+    #' @md
+    foo <- function() {}")[[1]]
+  out2 <- roc_proc_text(roc, "
+    #' Title
+    #'
+    #' Link
+    #' text \\href{http://www.someurl.com}{broken across lines} preserve
+    #' whitespace, even when
+    #' \\href{http://www.someurl.com}{broken across several lines},
+    #' or with varying
+    #' \\href{http://www.someurl.com}{amounts of interspersed whitespace}.
+    foo <- function() {}")[[1]]
+  expect_equivalent_rd(out1, out2)
+
 })
 
 test_that("links to S4 classes are OK", {
@@ -302,3 +395,37 @@ test_that("links to S4 classes are OK", {
   expect_equivalent_rd(out1, out2)
 
 })
+
+test_that("linebreak in 'text' of [text][foo] turns into single space", {
+
+  out1 <- roc_proc_text(roc, "
+    #' Title
+    #'
+    #' Link
+    #' text [broken
+    #' across lines][fcn] preserve
+    #' whitespace, even when
+    #' [broken across
+    #' several
+    #' lines][fcn],
+    #' or with varying
+    #' [amounts \
+    #'   of  \
+    #' interspersed   \
+    #'   whitespace][fcn].
+    #' @md
+    foo <- function() {}")[[1]]
+  out2 <- roc_proc_text(roc, "
+    #' Title
+    #'
+    #' Link
+    #' text \\link[=fcn]{broken across lines} preserve
+    #' whitespace, even when
+    #' \\link[=fcn]{broken across several lines},
+    #' or with varying
+    #' \\link[=fcn]{amounts of interspersed whitespace}.
+    foo <- function() {}")[[1]]
+  expect_equivalent_rd(out1, out2)
+
+})
+

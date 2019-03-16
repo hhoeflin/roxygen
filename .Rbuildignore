@@ -1,3 +1,7 @@
+.ipynb_checkpoints
+^docs$
+^_pkgdown\.yml$
+^CRAN-RELEASE$
 ^man-roxygen$
 ^.*\.Rproj$
 ^\.Rproj\.user$
