@@ -1,3 +1,4 @@
+.ipynb_checkpoints
 ^docs$
 ^_pkgdown\.yml$
 ^CRAN-RELEASE$
